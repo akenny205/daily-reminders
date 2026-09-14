@@ -32,8 +32,20 @@ def main() -> None:
 
     client = CanvasClient(base_url, token)
     try:
-        assignments = client.get_upcoming_assignments()
-        assignments += client.get_missing_submissions()
+        active_ids = client.get_active_course_ids()
+        favorite_ids = client.get_favorite_course_ids() & active_ids
+        if favorite_ids:
+            allowed_ids = favorite_ids
+        else:
+            allowed_ids = active_ids
+            print(
+                "No starred courses found in Canvas — showing all currently-enrolled courses instead. "
+                "Star your current courses in Canvas to narrow the digest down.",
+                file=sys.stderr,
+            )
+
+        assignments = client.get_upcoming_assignments(allowed_course_ids=allowed_ids)
+        assignments += client.get_missing_submissions(allowed_course_ids=allowed_ids)
     except CanvasClientError as e:
         print(f"Canvas error: {e}", file=sys.stderr)
         sys.exit(1)

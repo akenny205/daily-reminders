@@ -69,7 +69,7 @@ def send_email(subject: str, html_body: str, text_body: str, *, sender: str, app
     msg.attach(MIMEText(text_body, "plain"))
     msg.attach(MIMEText(html_body, "html"))
 
-    with smtplib.SMTP("smtp.gmail.com", 587) as server:
+    with smtplib.SMTP("smtp.gmail.com", 587, timeout=20) as server:
         server.starttls()
         server.login(sender, app_password)
         server.sendmail(sender, [recipient], msg.as_string())

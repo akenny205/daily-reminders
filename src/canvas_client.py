@@ -1,13 +1,15 @@
 """Thin client around the Canvas REST API for pulling outstanding work.
 
-Uses two endpoints:
-  - /api/v1/planner/items       -> upcoming assignments/quizzes/discussions (due today or later)
+Uses four endpoints:
+  - /api/v1/courses                        -> which courses count as "currently enrolled"
+  - /api/v1/users/self/favorites/courses   -> which of those are starred
+  - /api/v1/planner/items                   -> upcoming assignments/quizzes/discussions (due today or later)
   - /api/v1/users/self/missing_submissions -> already-overdue, ungraded work
 
-Both are paginated via the standard Canvas `Link` response header.
+All are paginated via the standard Canvas `Link` response header.
 """
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import List, Optional, Set
 
 import requests
 
@@ -24,8 +26,26 @@ class CanvasClient:
         self.session = requests.Session()
         self.session.headers.update({"Authorization": f"Bearer {api_token}"})
 
-    def get_upcoming_assignments(self, start_date: Optional[datetime] = None) -> List[Assignment]:
-        """Planner items with a plannable date today or later, excluding anything already submitted/excused."""
+    def get_active_course_ids(self) -> Set[int]:
+        """Course ids for enrollments that are currently active (excludes completed/concluded courses)."""
+        url = f"{self.base_url}/api/v1/courses"
+        params = {"enrollment_state": "active", "per_page": 100}
+        return {item["id"] for item in self._paginate(url, params)}
+
+    def get_favorite_course_ids(self) -> Set[int]:
+        """Course ids the user has starred in Canvas."""
+        url = f"{self.base_url}/api/v1/users/self/favorites/courses"
+        params = {"per_page": 100}
+        return {item["id"] for item in self._paginate(url, params)}
+
+    def get_upcoming_assignments(
+        self, start_date: Optional[datetime] = None, allowed_course_ids: Optional[Set[int]] = None
+    ) -> List[Assignment]:
+        """Planner items with a plannable date today or later, excluding anything already submitted/excused.
+
+        `allowed_course_ids`, if given, drops items belonging to any other course. Items with no
+        associated course (e.g. personal planner notes) are always kept.
+        """
         start_date = start_date or datetime.now(timezone.utc)
         url = f"{self.base_url}/api/v1/planner/items"
         params = {
@@ -36,18 +56,22 @@ class CanvasClient:
 
         assignments = []
         for item in self._paginate(url, params):
+            if not self._course_allowed(item.get("course_id"), allowed_course_ids):
+                continue
             assignment = self._parse_planner_item(item)
             if assignment is not None:
                 assignments.append(assignment)
         return assignments
 
-    def get_missing_submissions(self) -> List[Assignment]:
+    def get_missing_submissions(self, allowed_course_ids: Optional[Set[int]] = None) -> List[Assignment]:
         """Assignments already past due with no submission — surfaced separately as 'overdue'."""
         url = f"{self.base_url}/api/v1/users/self/missing_submissions"
         params = {"include[]": "course", "per_page": 50}
 
         assignments = []
         for item in self._paginate(url, params):
+            if not self._course_allowed(item.get("course_id"), allowed_course_ids):
+                continue
             due_at = self._parse_datetime(item.get("due_at"))
             course = (item.get("course") or {}).get("name") or f"Course {item.get('course_id', '?')}"
             assignments.append(
@@ -60,6 +84,12 @@ class CanvasClient:
                 )
             )
         return assignments
+
+    @staticmethod
+    def _course_allowed(course_id: Optional[int], allowed_course_ids: Optional[Set[int]]) -> bool:
+        if allowed_course_ids is None or course_id is None:
+            return True
+        return course_id in allowed_course_ids
 
     def _paginate(self, url: str, params: Optional[dict]):
         while url:
