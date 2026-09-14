@@ -4,6 +4,7 @@ Plain SMTP sockets don't work from every environment this script might run in (s
 sandboxes only proxy HTTP/HTTPS traffic), so delivery goes over a regular HTTPS POST
 instead of opening an SMTP connection.
 """
+from datetime import date
 from html import escape
 from typing import List, Tuple
 
@@ -33,11 +34,17 @@ def render_email(
     groups = {"overdue": overdue, "upcoming": upcoming, "no_due_date": no_due_date}
     total = sum(len(v) for v in groups.values())
 
-    if total == 0:
-        return "<p>Nothing due — you're all caught up! 🎉</p>", "Nothing due — you're all caught up!"
+    today_str = date.today().strftime("%A, %B %d, %Y")
+    date_header_html = f"<h2 style='margin:0 0 16px;color:#111;font-family:sans-serif;'>{today_str}</h2>"
 
-    html_parts = []
-    text_parts = []
+    if total == 0:
+        return (
+            date_header_html + "<p>Nothing due — you're all caught up! 🎉</p>",
+            f"{today_str}\nNothing due — you're all caught up!",
+        )
+
+    html_parts = [date_header_html]
+    text_parts = [today_str, ""]
 
     for key, heading, color in _SECTIONS:
         items = groups[key]
