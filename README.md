@@ -44,13 +44,14 @@ session. Revisit later if wanted.
 
 ## Scheduling
 
-Use Claude Code's `schedule` skill to run `python main.py` in this repo once a day as a
-cloud-scheduled agent, with `CANVAS_BASE_URL`, `CANVAS_API_TOKEN`, `RESEND_API_KEY`, and
-`RECIPIENT_EMAIL` registered as environment variables on the routine's environment.
-Trigger it once on demand after setup to confirm the cloud run works end-to-end before
-trusting the daily cadence.
+Runs via GitHub Actions (`.github/workflows/daily-digest.yml`) on a daily cron, plus a
+manual `workflow_dispatch` trigger for on-demand runs from the repo's Actions tab.
 
-Note: the cloud sandbox only proxies HTTP(S) traffic — raw SMTP sockets fail with
-`OSError: [Errno 97] Address family not supported by protocol` regardless of the
-environment's network access setting. That's why this sends mail via Resend's HTTPS
-API instead of SMTP.
+Add these as repo secrets (Settings → Secrets and variables → Actions → New repository
+secret): `CANVAS_BASE_URL`, `CANVAS_API_TOKEN`, `RESEND_API_KEY`, `RESEND_FROM`,
+`RECIPIENT_EMAIL` — same values as your local `.env`.
+
+(This previously ran as a Claude Code cloud routine. That worked, but consumed Claude
+usage on every run and needed a workaround for SMTP since that sandbox only proxies
+HTTP(S) traffic — GitHub Actions runners have normal outbound network access and cost
+nothing for a job this small, so it moved here instead.)
