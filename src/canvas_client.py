@@ -10,6 +10,7 @@ All are paginated via the standard Canvas `Link` response header.
 """
 from datetime import datetime, timezone
 from typing import List, Optional, Set
+from urllib.parse import urljoin
 
 import requests
 
@@ -79,7 +80,7 @@ class CanvasClient:
                     title=item.get("name", "Assignment"),
                     course=course,
                     due_at=due_at,
-                    url=item.get("html_url"),
+                    url=self._absolute_url(item.get("html_url")),
                     submitted=False,
                 )
             )
@@ -104,19 +105,28 @@ class CanvasClient:
             url = resp.links.get("next", {}).get("url")
             params = None  # the "next" URL already carries the query string
 
-    @staticmethod
-    def _parse_planner_item(item: dict) -> Optional[Assignment]:
+    def _parse_planner_item(self, item: dict) -> Optional[Assignment]:
         plannable = item.get("plannable") or {}
         submission = item.get("submissions")
         submitted = isinstance(submission, dict) and (submission.get("submitted") or submission.get("excused"))
         if submitted:
             return None
 
-        due_at = CanvasClient._parse_datetime(item.get("plannable_date") or plannable.get("due_at"))
+        due_at = self._parse_datetime(item.get("plannable_date") or plannable.get("due_at"))
         title = plannable.get("title") or item.get("plannable_type", "Item")
         course = item.get("context_name") or "Unknown course"
 
-        return Assignment(title=title, course=course, due_at=due_at, url=item.get("html_url"), submitted=False)
+        return Assignment(
+            title=title, course=course, due_at=due_at, url=self._absolute_url(item.get("html_url")), submitted=False
+        )
+
+    def _absolute_url(self, path: Optional[str]) -> Optional[str]:
+        """Canvas's `html_url` fields are relative paths (e.g. "/courses/1/assignments/2") —
+        resolve them against the Canvas host so links actually work outside a browser tab
+        that's already on that domain (e.g. in an email)."""
+        if not path:
+            return None
+        return urljoin(self.base_url, path)
 
     @staticmethod
     def _parse_datetime(raw: Optional[str]) -> Optional[datetime]:
