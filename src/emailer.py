@@ -1,11 +1,17 @@
-"""Renders the assignment digest as an email and sends it over Gmail SMTP."""
-import smtplib
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
+"""Renders the assignment digest as an email and sends it via the Resend HTTP API.
+
+Plain SMTP sockets don't work from every environment this script might run in (some
+sandboxes only proxy HTTP/HTTPS traffic), so delivery goes over a regular HTTPS POST
+instead of opening an SMTP connection.
+"""
 from html import escape
 from typing import List, Tuple
 
+import requests
+
 from .models import Assignment
+
+RESEND_API_URL = "https://api.resend.com/emails"
 
 _SECTIONS = [
     ("overdue", "⚠️ Overdue", "#c0392b"),
@@ -61,15 +67,18 @@ def render_email(
     return html_body, text_body
 
 
-def send_email(subject: str, html_body: str, text_body: str, *, sender: str, app_password: str, recipient: str) -> None:
-    msg = MIMEMultipart("alternative")
-    msg["Subject"] = subject
-    msg["From"] = sender
-    msg["To"] = recipient
-    msg.attach(MIMEText(text_body, "plain"))
-    msg.attach(MIMEText(html_body, "html"))
+class EmailSendError(Exception):
+    """Raised when the Resend API rejects or fails to send the email."""
 
-    with smtplib.SMTP("smtp.gmail.com", 587, timeout=20) as server:
-        server.starttls()
-        server.login(sender, app_password)
-        server.sendmail(sender, [recipient], msg.as_string())
+
+def send_email(
+    subject: str, html_body: str, text_body: str, *, api_key: str, recipient: str, from_address: str
+) -> None:
+    resp = requests.post(
+        RESEND_API_URL,
+        headers={"Authorization": f"Bearer {api_key}"},
+        json={"from": from_address, "to": [recipient], "subject": subject, "html": html_body, "text": text_body},
+        timeout=20,
+    )
+    if resp.status_code >= 400:
+        raise EmailSendError(f"Resend API returned {resp.status_code}: {resp.text}")

@@ -14,7 +14,7 @@ from dotenv import load_dotenv
 
 from src.aggregator import bucket_assignments
 from src.canvas_client import CanvasClient, CanvasClientError
-from src.emailer import render_email, send_email
+from src.emailer import EmailSendError, render_email, send_email
 
 
 def main() -> None:
@@ -64,14 +64,19 @@ def main() -> None:
         print(text_body)
         return
 
-    sender = os.environ.get("GMAIL_ADDRESS")
-    app_password = os.environ.get("GMAIL_APP_PASSWORD")
-    recipient = os.environ.get("RECIPIENT_EMAIL") or sender
-    if not sender or not app_password:
-        print("Missing GMAIL_ADDRESS or GMAIL_APP_PASSWORD in the environment (see .env.example).", file=sys.stderr)
+    api_key = os.environ.get("RESEND_API_KEY")
+    recipient = os.environ.get("RECIPIENT_EMAIL")
+    from_address = os.environ.get("RESEND_FROM", "onboarding@resend.dev")
+    if not api_key or not recipient:
+        print("Missing RESEND_API_KEY or RECIPIENT_EMAIL in the environment (see .env.example).", file=sys.stderr)
         sys.exit(1)
 
-    send_email(subject, html_body, text_body, sender=sender, app_password=app_password, recipient=recipient)
+    try:
+        send_email(subject, html_body, text_body, api_key=api_key, recipient=recipient, from_address=from_address)
+    except EmailSendError as e:
+        print(f"Email error: {e}", file=sys.stderr)
+        sys.exit(1)
+
     print(f"Email sent to {recipient}.")
 
 
