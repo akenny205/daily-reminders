@@ -2,10 +2,13 @@ name: Daily Homework Digest
 
 on:
   schedule:
-    # 12:00 UTC = 8:00 AM America/New_York during EDT (summer). Fixed UTC cron doesn't
-    # follow DST, so this drifts to 7:00 AM ET during EST (winter) — same limitation the
+    # 12:05 UTC ≈ 8:05 AM America/New_York during EDT (summer). Fixed UTC cron doesn't
+    # follow DST, so this drifts to 7:05 AM ET during EST (winter) — same limitation the
     # previous Claude Code routine had. Adjust the hour here if that ever matters.
-    - cron: "0 12 * * *"
+    #
+    # Deliberately :05 rather than :00 — GitHub's own docs warn that schedules landing
+    # exactly on the hour are the most likely to be delayed or dropped under load.
+    - cron: "5 12 * * *"
   workflow_dispatch: {} # lets you trigger a run manually from the Actions tab
 
 jobs:
